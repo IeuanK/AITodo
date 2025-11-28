@@ -1,30 +1,98 @@
-<script setup>
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
+  <div id="app" class="app-container">
+    <TopBar />
+
+    <div class="app-body">
+      <Sidebar />
+
+      <main class="main-content">
+        <router-view />
+      </main>
+    </div>
+
+    <BottomBar />
   </div>
-  <HelloWorld msg="Vite + Vue" />
 </template>
 
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+<script setup>
+import { onMounted } from 'vue';
+import TopBar from './components/layout/TopBar.vue';
+import Sidebar from './components/layout/Sidebar.vue';
+import BottomBar from './components/layout/BottomBar.vue';
+import { useTasksStore } from './stores/tasks';
+import { useContextsStore } from './stores/contexts';
+import { useViewsStore } from './stores/views';
+import { useSettingsStore } from './stores/settings';
+
+const tasksStore = useTasksStore();
+const contextsStore = useContextsStore();
+const viewsStore = useViewsStore();
+const settingsStore = useSettingsStore();
+
+// Initialize all stores on mount
+onMounted(async () => {
+  await tasksStore.init();
+  await contextsStore.init();
+  await viewsStore.init();
+  await settingsStore.init();
+});
+</script>
+
+<style lang="scss">
+// Reset and base styles
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+
+html,
+body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f5f5f5;
 }
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
+
+#app {
+  height: 100%;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+// Utility classes
+.text-muted {
+  color: #666;
+}
+
+.text-danger {
+  color: #d0021b;
+}
+
+.text-success {
+  color: #7ed321;
+}
+
+.text-info {
+  color: #4a90e2;
 }
 </style>
