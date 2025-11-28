@@ -81,7 +81,7 @@ VITE_APP_VERSION=1.0.0
 The project is configured for automatic deployment to GitHub Pages:
 
 1. Push changes to `main` branch
-2. GitHub Actions automatically builds and deploys
+2. GitHub Actions automatically builds, merges to the `gh-pages` branch, and deploys from there
 3. Site is live at `https://[username].github.io/AITodo/`
 
 ### Manual Build
