@@ -23,13 +23,31 @@ MyLifeOrganized's power comes from:
 
 ### Supporting Libraries
 - **date-fns** - Date manipulation and formatting
-- **localforage** - IndexedDB wrapper for local data persistence
 - **@vueuse/core** - Vue composition utilities
 - **Sass** - CSS preprocessing
 
-### Data Storage
-- **IndexedDB** via localforage for task data persistence
-- **localStorage** for user preferences and settings
+### Data Storage & Abstraction
+- **Storage Abstraction Layer** - Interface-based architecture allowing seamless switching between storage backends
+- **LocalStorage** (current) - Browser localStorage for immediate persistence (via Pinia)
+- **API Backend** (future) - REST API integration ready via adapter pattern
+- **Storage Factory** - Configuration-based adapter selection
+
+The application uses a repository pattern with a storage adapter interface (`IStorageAdapter`) that defines the contract for all storage operations. This allows the application to switch between localStorage and a backend API without changing any business logic.
+
+**Current Implementation:**
+- `LocalStorageAdapter` - Uses browser localStorage for all data persistence
+- `ApiStorageAdapter` - Stub implementation ready for backend integration
+
+**Switching Storage:**
+Set `VITE_STORAGE_TYPE` in `.env` file:
+- `localStorage` - Local browser storage (default)
+- `api` - Backend API (requires `VITE_API_BASE_URL`)
+
+### Deployment & Hosting
+- **GitHub Pages** - Static site hosting
+- **GitHub Actions** - Automated CI/CD pipeline
+- **Vite Build** - Optimized production builds with code splitting
+- **SPA Routing** - Client-side routing with Vue Router
 
 ## Feature Set (Complete MLO Replication)
 
@@ -326,6 +344,11 @@ src/
 ├── App.vue                 # Root component
 ├── router/
 │   └── index.js            # Vue Router configuration
+├── services/               # Storage abstraction layer
+│   ├── IStorageAdapter.js  # Storage interface/contract
+│   ├── LocalStorageAdapter.js  # localStorage implementation
+│   ├── ApiStorageAdapter.js    # API backend implementation (stub)
+│   └── storageFactory.js   # Factory for creating storage adapters
 ├── stores/                 # Pinia stores
 │   ├── tasks.js            # Task data and operations
 │   ├── views.js            # View configurations
@@ -370,11 +393,10 @@ src/
 │   ├── useRecurrence.js    # Recurring task logic
 │   └── useDragDrop.js      # Drag & drop handling
 ├── utils/
-│   ├── database.js         # IndexedDB wrapper
 │   ├── priority.js         # Priority calculation algorithms
 │   ├── dateHelpers.js      # Date utilities
 │   ├── taskHelpers.js      # Task manipulation utilities
-│   └── exportImport.js     # Data export/import
+│   └── exportImport.js     # Data export/import (uses storage adapter)
 └── styles/
     ├── variables.scss      # Design tokens
     ├── mixins.scss         # Reusable styles
@@ -516,38 +538,109 @@ function isTaskActive(task) {
 }
 ```
 
-#### 4.5 Data Persistence
+#### 4.5 Data Persistence & Storage Abstraction
+
+The application uses a **storage abstraction layer** based on the Repository Pattern. This allows seamless switching between different storage backends without modifying application logic.
+
+**Architecture:**
 
 ```javascript
-// database.js - IndexedDB wrapper using localforage
+// storageFactory.js - Creates the appropriate storage adapter
 
-import localforage from 'localforage';
+import { LocalStorageAdapter } from './LocalStorageAdapter';
+import { ApiStorageAdapter } from './ApiStorageAdapter';
 
-const taskDB = localforage.createInstance({
-  name: 'MLO-Clone',
-  storeName: 'tasks'
+export function getStorageAdapter(config = {}) {
+  const storageType = config.type || import.meta.env.VITE_STORAGE_TYPE || 'localStorage';
+
+  switch (storageType) {
+    case 'api':
+      return new ApiStorageAdapter({
+        baseUrl: config.apiBaseUrl || import.meta.env.VITE_API_BASE_URL,
+        token: config.apiToken || import.meta.env.VITE_API_TOKEN,
+      });
+    case 'localStorage':
+    default:
+      return new LocalStorageAdapter();
+  }
+}
+```
+
+**Storage Interface (IStorageAdapter):**
+All storage adapters implement this interface:
+- `getTasks()` / `saveTasks(tasks)`
+- `getTask(id)` / `createTask(task)` / `updateTask(id, updates)` / `deleteTask(id)`
+- `getContexts()` / `saveContexts(contexts)`
+- `getSettings()` / `saveSettings(settings)`
+- `getViews()` / `saveViews(views)`
+- `exportData()` / `importData(data)`
+- `clearAll()`
+
+**Current Implementation: LocalStorage**
+```javascript
+// LocalStorageAdapter.js
+export class LocalStorageAdapter extends IStorageAdapter {
+  async getTasks() {
+    const tasks = localStorage.getItem('mlo_tasks');
+    return tasks ? JSON.parse(tasks) : [];
+  }
+
+  async saveTasks(tasks) {
+    localStorage.setItem('mlo_tasks', JSON.stringify(tasks));
+  }
+  // ... other methods
+}
+```
+
+**Future Implementation: API Backend**
+```javascript
+// ApiStorageAdapter.js
+export class ApiStorageAdapter extends IStorageAdapter {
+  async getTasks() {
+    const response = await fetch(`${this.baseUrl}/tasks`, {
+      headers: { 'Authorization': `Bearer ${this.token}` }
+    });
+    return await response.json();
+  }
+  // ... other methods
+}
+```
+
+**Usage in Pinia Stores:**
+```javascript
+// stores/tasks.js
+import { defineStore } from 'pinia';
+import { getStorageAdapter } from '@/services/storageFactory';
+
+export const useTasksStore = defineStore('tasks', {
+  state: () => ({
+    tasks: [],
+    storage: getStorageAdapter(),
+  }),
+
+  actions: {
+    async loadTasks() {
+      this.tasks = await this.storage.getTasks();
+    },
+
+    async saveTask(task) {
+      await this.storage.createTask(task);
+      await this.loadTasks(); // Reload from storage
+    },
+  },
 });
+```
 
-const settingsDB = localforage.createInstance({
-  name: 'MLO-Clone',
-  storeName: 'settings'
-});
+**Configuration:**
+Create a `.env` file to configure storage:
+```bash
+# Use localStorage (default)
+VITE_STORAGE_TYPE=localStorage
 
-export async function saveTasks(tasks) {
-  await taskDB.setItem('allTasks', tasks);
-}
-
-export async function loadTasks() {
-  return await taskDB.getItem('allTasks') || [];
-}
-
-export async function saveSettings(settings) {
-  await settingsDB.setItem('userSettings', settings);
-}
-
-export async function loadSettings() {
-  return await settingsDB.getItem('userSettings') || {};
-}
+# Or use API backend
+VITE_STORAGE_TYPE=api
+VITE_API_BASE_URL=https://api.example.com/v1
+VITE_API_TOKEN=your-token-here
 ```
 
 ### 5. UI/UX Details
@@ -598,10 +691,13 @@ export async function loadSettings() {
 
 #### Phase 1: Foundation (Week 1)
 - ✅ Set up Vue 3 + Vite project
-- ✅ Install dependencies (Pinia, Vue Router, date-fns, localforage)
+- ✅ Install dependencies (Pinia, Vue Router, date-fns, @vueuse/core, sass)
+- ✅ Configure GitHub Pages deployment (GitHub Actions workflow)
+- ✅ Set up Vite build configuration for GitHub Pages
+- ✅ Create storage abstraction layer (IStorageAdapter, LocalStorageAdapter, ApiStorageAdapter)
+- ✅ Implement storage factory with environment-based configuration
 - Set up basic routing
-- Create Pinia stores (tasks, views, contexts)
-- Implement database wrapper (IndexedDB)
+- Create Pinia stores (tasks, views, contexts) with storage adapter integration
 - Create basic layout components (TopBar, Sidebar, BottomBar)
 
 #### Phase 2: Core Task Management (Week 2)
@@ -769,6 +865,71 @@ export async function loadSettings() {
 - **Color contrast** - WCAG AA compliance
 - **Focus indicators** - Clear visual focus
 
+### 14. Deployment & CI/CD
+
+#### GitHub Pages Deployment
+
+The application is configured for automatic deployment to GitHub Pages using GitHub Actions.
+
+**Workflow Configuration** (`.github/workflows/deploy.yml`):
+- Triggers on push to `main` branch or manual workflow dispatch
+- Installs dependencies with `npm ci`
+- Builds production bundle with `npm run build`
+- Deploys to GitHub Pages using `actions/deploy-pages@v4`
+
+**Build Configuration** (`vite.config.js`):
+```javascript
+export default defineConfig({
+  plugins: [vue()],
+  base: process.env.NODE_ENV === 'production' ? '/AITodo/' : '/',
+})
+```
+
+**Deployment Steps:**
+1. Push changes to `main` branch
+2. GitHub Actions automatically builds and deploys
+3. Site is live at `https://[username].github.io/AITodo/`
+
+**Local Development:**
+```bash
+# Development server (http://localhost:5173)
+npm run dev
+
+# Production build
+npm run build
+
+# Preview production build locally
+npm run preview
+```
+
+**GitHub Pages Setup:**
+1. Go to repository Settings → Pages
+2. Source: GitHub Actions
+3. The workflow handles the rest automatically
+
+#### Environment Configuration
+
+**Development** (`.env`):
+```bash
+VITE_STORAGE_TYPE=localStorage
+VITE_APP_NAME=MyLifeOrganized Clone
+```
+
+**Production** (GitHub Actions):
+- Uses localStorage by default
+- API backend can be configured via repository secrets
+- Set `VITE_API_BASE_URL` and `VITE_API_TOKEN` as secrets
+
+**Switching to API Backend:**
+1. Update `.env` or set environment variables:
+   ```bash
+   VITE_STORAGE_TYPE=api
+   VITE_API_BASE_URL=https://api.example.com/v1
+   VITE_API_TOKEN=your-token
+   ```
+2. Rebuild application
+3. All data operations automatically use API instead of localStorage
+
 ## Conclusion
 
 This plan provides a comprehensive roadmap for building a full-featured MyLifeOrganized clone in the browser. The implementation focuses on:
@@ -776,10 +937,12 @@ This plan provides a comprehensive roadmap for building a full-featured MyLifeOr
 1. **Accurate replication** of MLO's core features
 2. **Performance** for handling large task lists
 3. **Usability** with keyboard shortcuts and drag & drop
-4. **Reliability** with local data persistence
-5. **Extensibility** for future enhancements
+4. **Reliability** with local data persistence and storage abstraction
+5. **Scalability** with API-ready architecture via adapter pattern
+6. **Deployment** via GitHub Pages with automated CI/CD
+7. **Extensibility** for future enhancements
 
-The phased approach allows for incremental development and testing, ensuring each feature works before moving to the next. The result will be a powerful, browser-based task management application that matches MLO's functionality while being accessible anywhere with a web browser.
+The phased approach allows for incremental development and testing, ensuring each feature works before moving to the next. The storage abstraction layer provides flexibility to start with localStorage and seamlessly migrate to a backend API when needed. The result will be a powerful, browser-based task management application that matches MLO's functionality while being accessible anywhere with a web browser.
 
 ## References
 
