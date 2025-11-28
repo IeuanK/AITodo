@@ -1,9 +1,18 @@
 <template>
   <div class="view-container">
     <div class="view-header">
-      <h2 class="view-title">Outline</h2>
+      <div class="view-title-section">
+        <h2 class="view-title">📋 Outline</h2>
+        <span class="task-count">{{ tasks.length }} tasks</span>
+      </div>
       <div class="view-actions">
-        <button @click="addTask" class="btn-primary">+ Add Task</button>
+        <button @click="expandAll" class="btn-secondary" title="Expand all">
+          ⊞
+        </button>
+        <button @click="collapseAll" class="btn-secondary" title="Collapse all">
+          ⊟
+        </button>
+        <button @click="addRootTask" class="btn-primary">+ New Task</button>
       </div>
     </div>
 
@@ -13,34 +22,30 @@
       <div v-else-if="tasks.length === 0" class="empty-state">
         <div class="empty-icon">📋</div>
         <h3>No tasks yet</h3>
-        <p>Click "Add Task" to create your first task</p>
+        <p>Click "New Task" to create your first task</p>
       </div>
-      <div v-else class="task-list">
-        <div
+      <div v-else class="task-tree">
+        <TaskTreeItem
           v-for="task in rootTasks"
           :key="task.id"
-          class="task-item"
-          :class="{ completed: task.isCompleted }"
-        >
-          <input
-            type="checkbox"
-            :checked="task.isCompleted"
-            @change="toggleComplete(task.id)"
-            class="task-checkbox"
-          />
-          <span class="task-title">{{ task.title }}</span>
-          <span v-if="task.dueDate" class="task-due-date">
-            {{ formatDate(task.dueDate) }}
-          </span>
-        </div>
+          :task="task"
+          :indent-level="0"
+          :selected-task-id="selectedTaskId"
+          @select="handleSelectTask"
+          @toggle-complete="handleToggleComplete"
+          @update="handleUpdateTask"
+          @delete="handleDeleteTask"
+          @add-child="handleAddChild"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useTasksStore } from '../stores/tasks';
+import TaskTreeItem from '../components/TaskTreeItem.vue';
 
 const tasksStore = useTasksStore();
 
@@ -48,22 +53,55 @@ const loading = computed(() => tasksStore.loading);
 const error = computed(() => tasksStore.error);
 const tasks = computed(() => tasksStore.tasks);
 const rootTasks = computed(() => tasksStore.rootTasks);
+const selectedTaskId = computed(() => tasksStore.selectedTaskId);
 
-const addTask = async () => {
-  await tasksStore.createTask({
+const addRootTask = async () => {
+  const newTask = await tasksStore.createTask({
     title: 'New Task',
     isInInbox: false,
+    color: null,
   });
+  // Auto-select and start editing the new task
+  tasksStore.selectTask(newTask.id);
 };
 
-const toggleComplete = async (taskId) => {
+const handleSelectTask = (taskId) => {
+  tasksStore.selectTask(taskId);
+};
+
+const handleToggleComplete = async (taskId) => {
   await tasksStore.toggleComplete(taskId);
 };
 
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString();
+const handleUpdateTask = async ({ id, updates }) => {
+  await tasksStore.updateTask(id, updates);
+};
+
+const handleDeleteTask = async ({ id, deleteChildren }) => {
+  await tasksStore.deleteTask(id, deleteChildren);
+};
+
+const handleAddChild = async (parentId) => {
+  const newTask = await tasksStore.createTask({
+    title: 'New Child Task',
+    parentId,
+    isInInbox: false,
+    color: null,
+  });
+  // Auto-select the new child task
+  tasksStore.selectTask(newTask.id);
+};
+
+const expandAll = () => {
+  // This would require state management in TaskTreeItem
+  // For now, this is a placeholder
+  console.log('Expand all - to be implemented');
+};
+
+const collapseAll = () => {
+  // This would require state management in TaskTreeItem
+  // For now, this is a placeholder
+  console.log('Collapse all - to be implemented');
 };
 </script>
 
@@ -79,42 +117,77 @@ const formatDate = (dateString) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem;
+  padding: 12px 16px;
   border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.view-title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .view-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
 }
 
+.task-count {
+  font-size: 12px;
+  color: #999;
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
 .view-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 6px;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 6px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  color: #333;
+
+  &:hover {
+    background: #f5f5f5;
+    border-color: #999;
+  }
 }
 
 .btn-primary {
-  padding: 0.6rem 1.2rem;
   background: #4a90e2;
   color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
+  border-color: #4a90e2;
 
   &:hover {
     background: #357abd;
+    border-color: #357abd;
   }
+}
+
+.btn-secondary {
+  min-width: 32px;
+  padding: 6px 8px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .view-content {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  background: #fff;
 }
 
 .loading-message,
@@ -122,6 +195,7 @@ const formatDate = (dateString) => {
   text-align: center;
   padding: 3rem;
   color: #666;
+  font-size: 14px;
 }
 
 .error-message {
@@ -150,48 +224,9 @@ const formatDate = (dateString) => {
   }
 }
 
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.task-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #f0f0f0;
-    border-color: #d0d0d0;
-  }
-
-  &.completed {
-    opacity: 0.6;
-
-    .task-title {
-      text-decoration: line-through;
-    }
-  }
-}
-
-.task-checkbox {
-  cursor: pointer;
-}
-
-.task-title {
-  flex: 1;
-  font-size: 0.95rem;
-  color: #333;
-}
-
-.task-due-date {
-  font-size: 0.85rem;
-  color: #666;
+.task-tree {
+  padding: 8px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
 }
 </style>

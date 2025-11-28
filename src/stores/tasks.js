@@ -182,6 +182,7 @@ export const useTasksStore = defineStore('tasks', {
           flags: taskData.flags || [],
           isStarred: taskData.isStarred || false,
           isInInbox: taskData.isInInbox || false,
+          color: taskData.color || null,
 
           // Goals & Review
           goalType: taskData.goalType || null,
